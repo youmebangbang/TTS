@@ -158,17 +158,48 @@ class Synthesizer(object):
         Returns:
             List[str]: list of sentences.
         """
-        return self.seg.segment(text)
+        #time to hack!
+        import re
+        text_list = re.split(r'(?<=[\.\!\?])\s*', text)
+        temp_string = ""
+        rebuilt_text = []      
+        for t in text_list:
+            t = t.strip()
+            if t:
+                if len([*temp_string]) + len([*t]) < 90:
+                    temp_string = temp_string + ' ' + t
+                else:
+                    rt = temp_string + ' ' + t
+                    rt = rt.strip()
+                    rebuilt_text.append(rt)
+                    temp_string = ""
+        if temp_string:
+            rebuilt_text.append(temp_string.strip())  
 
-    def save_wav(self, wav: List[int], path: str) -> None:
+        return rebuilt_text
+        # return self.seg.segment(text)
+
+    def save_wav(self, wav_list, path: str) -> None:
         """Save the waveform as a file.
 
         Args:
             wav (List[int]): waveform as a list of values.
             path (str): output path to save the waveform.
         """
-        wav = np.array(wav)
-        self.tts_model.ap.save_wav(wav, path, self.output_sample_rate)
+        index = 0
+        import os
+        import shutil
+        if os.path.exists("wavs_out/"):
+            shutil.rmtree("wavs_out")
+        os.mkdir("wavs_out")
+        for w in wav_list:
+            path = f"wavs_out/{index}.wav"
+            print(f"SAVING WAV {path}")
+            w = np.array(w)
+            self.tts_model.ap.save_wav(w, path, self.output_sample_rate)  
+            index += 1
+        # wav = np.array(wav)
+        # self.tts_model.ap.save_wav(wav, path, self.output_sample_rate)
 
     def tts(
         self,
@@ -270,6 +301,7 @@ class Synthesizer(object):
 
         use_gl = self.vocoder_model is None
 
+        wav_list = []
         if not reference_wav:
             for sen in sens:
                 # synthesize voice
@@ -316,8 +348,11 @@ class Synthesizer(object):
                 if "do_trim_silence" in self.tts_config.audio and self.tts_config.audio["do_trim_silence"]:
                     waveform = trim_silence(waveform, self.tts_model.ap)
 
-                wavs += list(waveform)
-                wavs += [0] * 10000
+                #save separate wavs to file
+                wav_list.append(list(waveform))
+                
+                # wavs += list(waveform)
+                # wavs += [0] * 10000
         else:
             # get the speaker embedding or speaker id for the reference wav file
             reference_speaker_embedding = None
@@ -378,8 +413,8 @@ class Synthesizer(object):
             wavs = waveform.squeeze()
 
         # compute stats
-        process_time = time.time() - start_time
-        audio_time = len(wavs) / self.tts_config.audio["sample_rate"]
-        print(f" > Processing time: {process_time}")
-        print(f" > Real-time factor: {process_time / audio_time}")
-        return wavs
+        # process_time = time.time() - start_time
+        # audio_time = len(wavs) / self.tts_config.audio["sample_rate"]
+        # print(f" > Processing time: {process_time}")
+        # print(f" > Real-time factor: {process_time / audio_time}")
+        return wav_list
